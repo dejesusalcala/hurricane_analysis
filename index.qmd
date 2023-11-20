@@ -1,0 +1,636 @@
+---
+title: "Hurricane Analysis"
+author: "Angel Alcala Ruiz"
+date: "2023-04-29"
+format:
+  html:
+    code-fold: true
+    code-tools: true
+    toc: true
+    toc-location: left
+    css: styles.css
+---
+
+# 1. Introduction
+
+Let's perform an analysis on tropical cyclones in the North Atlantic. The data that we'll be using is from the [*International Best Track Archive for Climate Stewardship*](https://www.ncei.noaa.gov/products/international-best-track-archive). The CSV file can be found [*here*](https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r00/access/csv/) while the data documentation can be found [*here*](https://www.ncei.noaa.gov/sites/default/files/2021-07/IBTrACS_v04_column_documentation.pdf).
+
+Tropical cyclones are also known as tropical systems. They generally form near the tropical regions where the ocean is at least 80 degrees Fahrenheit. This warm water evaporates which creates warm moist air that acts as fuel for the storms. When this warm air rises into the atmosphere it begins to cool and large stormy clouds begin to form. As more warm air continues to rise then the winds will spiral and increase in speed.
+
+The wind speed in the tropical cyclones is used to classify each storm. According to the Saffir-Simpson Wind Scale we have the following table
+
+| Tropical Cyclone    | Sustained Wind Speed | Type of Hurricane         | Named   |
+|:--------------------|:---------------------|:--------------------------|:--------|
+| Tropical Depression | 38 mph or less       | Not a hurricane           | Unnamed |
+| Tropical Storm      | 39 - 73 mph          | Not a hurricane           | Named   |
+| Category 1          | 74 - 95 mph          | Hurricane                 | Named   |
+| Category 2          | 96 - 110 mph         | Hurricane                 | Named   |
+| Category 3          | 111 - 129 mph        | Major hurricane           | Named   | 
+| Category 4          | 130 - 156 mph        | Major hurricane           | Named   |
+| Category 5          | 157 mph or higher    | Major hurricane           | Named   |
+
+It's also important to note that hurricanes, cyclones, and typhoons are all tropical cyclones but are referred to as different names depending on the location in which they form. Hurricanes form in the North Atlantic, central North Pacific, and eastern North Pacific. Cyclones form in the South Pacific and Indian Ocean. Finally, typhoons form in the Northwest Pacific. More information on hurricanes form can be found at the [*University Corporation For Atmospheric Research*](https://scied.ucar.edu/learning-zone/storms/how-hurricanes-form).
+
+# 2. Data Preparation
+
+To begin working with our dataset we're going to need the following R packages
+
+```{r}
+#| warning: FALSE
+#| message: FALSE
+
+library(tidyverse)
+library(lubridate)
+library(spData)
+library(rmdformats)
+```
+
+
+```{r}
+original_DF = read.csv(file = "./data/ibtracs.NA.list.v04r00.csv")
+```
+
+```{r}
+head(select(original_DF,1:6))
+```
+
+We can see that the first row is unnecessary. We can also see that in the column `BASIN` the entry `NA` is being returned as a missing value in R, but it actually represents the North Atlantic region. Therefore we should fix this. 
+
+Now we can clean our data by changing the column names, specifying the data types, and by specifying how missing values are encoded
+
+```{r}
+# Vector of names for first 16 columns
+
+col_names = c("SID",
+              "SEASON",
+              "NUMBER",
+              "BASIN",
+              "SUBBASIN",
+              "NAME",
+              "ISO_TIME",
+              "NATURE",
+              "LAT",
+              "LON",
+              "WMO_WIND",
+              "WMO_PRES",
+              "WMO_AGENCY",
+              "TRACK_TYPE",
+              "DIST2LAND",
+              "LANDFALL"
+              )
+
+# Vector of data-types for first 16 columns
+
+col_types = c("character",
+              "integer",
+              "integer",
+              "character",
+              "character",
+              "character",
+              "character",
+              "character",
+              "numeric",
+              "numeric",
+              "integer",
+              "integer",
+              "character",
+              "character",
+              "integer",
+              "integer"
+              )
+
+DF = read.csv(file = "./data/ibtracs.NA.list.v04r00.csv",
+                stringsAsFactors = FALSE,
+                skip = 1,
+                na.strings = ""
+                )
+
+# Renaming columns using col_names
+
+colnames(DF) = col_names
+
+# Update df to only the first 16 columns
+
+DF = select(DF, 1:16)
+```
+
+In our analysis it will also be useful work with months so let's add a month column to our dataset
+
+```{r}
+DF$ISO_TIME = as.POSIXct(DF$ISO_TIME)
+DF$MONTH = lubridate::month(DF$ISO_TIME)
+```
+
+We'll also focus on the time period beginning from 1970 instead of 1851 because in the 1960's we began to track these storms with satellites.
+
+```{r}
+DF = filter(DF, SEASON >= 1970)
+```
+
+
+Now let's take a look at our data
+
+```{r}
+head(select(DF,1:6))
+```
+
+```{r}
+str(DF, vec.len = 1)
+```
+
+Now we can begin working with our dataset.
+
+# 3. Analysis
+
+We'll be focusing on the 2012 Atlantic hurricane season. Let's create a new that includes all of the depressions that occurred in **2012**. Therefore we have the following
+
+```{r}
+depressions_2012 = filter(DF, SEASON == 2012)
+```
+
+## 3.1. Seasonal Statistics
+
+### 3.1.a.) Total number of depressions
+
+A tropical depression is such that are those that have winds of **38 mph** or less. Therefore we can find the total with the following code
+
+```{r}
+# 38 mph = 33.02 knots
+
+depressions_2012 %>%
+  filter(WMO_WIND <= 33.02) %>%
+  group_by(NAME) %>%
+  summarise(SID = first(SID),
+            BASIN = first(BASIN))
+```
+
+Therefore we have that the total number of depressions was **19** in **2012**.
+
+### 3.1.b.) Number of named storms
+
+We know that the number of named storms are those such that have winds of at least **39 mph**. Therefore we can find the total with the following code
+
+```{r}
+# 39 mph = 33.89 knots
+
+depressions_2012 %>%
+  group_by(NAME) %>%
+  filter(WMO_WIND > 33.89) %>%
+  summarise(SID = first(SID),
+            BASIN = first(BASIN))
+```
+
+Therefore we have that the total number of named storms was **19** in **2012**.
+
+### 3.1.c.) The number of hurricanes, and their names
+
+We know that a named storm becomes a hurricane once its winds reach at least **74 mph**. Therefore we can find the total with the following code
+
+```{r}
+# 74 mph = 64.30 knots
+
+depressions_2012 %>%
+  filter(WMO_WIND >= 64.30) %>%
+  group_by(NAME) %>%
+  summarise(SID = first(SID),
+            BASIN = first(BASIN))
+```
+
+Therefore we have that the number of hurricanes was **10** in **2012**.
+
+### 3.1.d.) Number of major hurricanes, and their names
+
+We know that a storm becomes a major hurricane when its wind speeds reach **111 mph**. We can find this total with the following code
+
+```{r}
+# 111 mph = 96.46 knots
+
+depressions_2012 %>%
+  filter(WMO_WIND >= 96.46) %>%
+  group_by(NAME) %>% 
+  summarise(SID = first(SID),
+            BASIN = first(BASIN))
+```
+
+Therefore we can conclude that there were two major hurricanes in **2012** and there names were **Michael** and **Sandy**.
+
+### 3.1.e.) Date of the first system formed, and its name.
+
+We can find this with the following code
+
+```{r}
+depressions_2012 %>%
+  select(NAME, ISO_TIME) %>%
+  arrange(ISO_TIME) %>%
+  slice(1)
+```
+
+Therefore the date of the first system was **2012-05-19** and its name was **Alberto**.
+
+### 3.1.f.) Date of the last system dissipated, and its name
+
+We can find this with the following code
+
+```{r}
+depressions_2012 %>%
+  select(NAME, ISO_TIME) %>%
+  arrange(desc(ISO_TIME)) %>%
+  slice(1)
+```
+
+Therefore the date of the last system dissipated was **2012-10-31** and its name was **Sandy**.
+
+## 3.2. Statistics of Strongest Storm
+
+### 3.2.a.) Name of the strongest storm
+
+We can find this with the following
+
+```{r}
+depressions_2012 %>%
+  filter(WMO_WIND == max(depressions_2012$WMO_WIND, na.rm = TRUE)) %>%
+  group_by(NAME) %>%
+  summarise()
+```
+
+Therefore we can conclude that there were two storms that were equally as strong. These storms were **Michael** and **Sandy**.
+
+### 3.2.b.) Its maximum wind speed
+
+We can find this with the following
+
+```{r}
+depressions_2012 %>%
+  filter(WMO_WIND == max(WMO_WIND, na.rm = TRUE)) %>%
+  group_by(NAME) %>%
+  summarise(Max_Wind =  max(WMO_WIND, na.rm = TRUE))
+```
+
+The maximum wind speed for both **Michael** and **Sandy** were **100 knots** or about **115 mph**.
+
+### 3.2.c.) Its lowest pressure
+
+We can find this with the following code
+
+```{r}
+depressions_2012 %>%
+  filter(NAME == "MICHAEL" | NAME == "SANDY") %>%
+  group_by(NAME) %>%
+  summarise(min_pres = min(WMO_PRES, na.rm = TRUE),
+            max_pres = max(WMO_PRES, na.rm = TRUE)
+            )
+
+```
+
+Therefore the lowest pressure for **Michael** was **964**, and the lowest pressure for **Sandy** was **940**.
+
+## 3.3. Historical Comparison
+
+### 3.3.a.) Compared to the "historical" average number of named storms, was the 2012 season an above-average, a below-average, or an average season?
+
+First, let's create a data frame `named_storms` which contains all of the named storms between **1970** and **2021**. Therefore we have
+
+```{r}
+# 39 mph = 33.89 knots
+
+named_storms = DF %>%
+  group_by(NAME) %>%
+  select(NAME, SEASON, WMO_WIND) %>%
+  filter(WMO_WIND >= 33.89) %>%
+  count(SEASON)
+```
+
+We can display the first **5** rows of this data frame
+
+```{r}
+head(named_storms)
+```
+
+Now using `named_storms` we can create a new data frame `num_mamed_storm` which contains all of the named storms that happened per year
+
+```{r}
+num_named_storms = named_storms %>%
+  group_by(SEASON) %>%
+  count(SEASON)
+```
+
+We can display the first **5** rows of `num_named_storms`
+
+```{r}
+head(num_named_storms)
+```
+
+Now we can compute the average number of named storms
+
+```{r}
+mean(num_named_storms$n)
+```
+
+We can extract the total number of named storms in **2012** with the following
+
+```{r}
+filter(num_named_storms, SEASON == 2012)
+```
+
+Therefore the average number of named storms between **1970** and **2021** was about **12** per year. In **2012** there were **19** named storms, therefore **2012** was an **above-average season** for named storms.
+
+We can see this in the following graph
+
+```{r, echo=FALSE}
+# The colors I'll be using
+
+my_red = "#dd5959"       # Red
+my_blue = "#47b0b0"      # blue/turquoise
+my_grey1 = "#999999"     # Light grey
+my_grey2 = "#5b5b5b"     # Dark grey, close to the standard ggplot grey
+```
+
+```{r}
+ggplot(data = num_named_storms, aes(x = SEASON, y = n)) +
+    geom_col(width = .8,
+             fill = my_grey1) + 
+    labs(title = "Total Number of Named Storms",
+         subtitle = "Comparing the historical average number of named storms to the 2012 season",
+         x = "Year",
+         y = "Total") + 
+  geom_col(data = filter(num_named_storms, SEASON == 2012),
+           width = .8,
+           fill = my_red) + 
+  geom_text(x = 2012,
+            y = 21,
+            label = "2012",
+            color = my_red,
+            size = 6.8) + 
+  geom_hline(yintercept = mean(num_named_storms$n),
+             color = my_blue,
+             size = 1) + 
+  geom_text(x = 1974,
+            y = 20,
+            size = 6,
+            color = my_blue,
+            aes(label = "Average")) + 
+  geom_segment(x = 1974, y = 18.3,
+               xend = 1974 , yend = 13,
+               lineend = "round",
+               linejoin = "round",
+               size = .7,
+               color = my_blue,
+               arrow = arrow(length = unit(0.3, "cm"),
+                             type = "closed")
+               )
+```
+
+### 3.3.b.) Compared to the "historical" average number of hurricanes, was the 2012 season an above-average, a below-average, or an average season?
+
+First, let's create a data frame `named_hurricanes` which contains all of the named hurricanes between **1970** and **2021**. Therefore we have
+
+```{r}
+# 74 mph = 64.30 knots
+
+named_hurricanes = DF %>%
+  group_by(NAME) %>%
+  select(NAME, SEASON, WMO_WIND) %>%
+  filter(WMO_WIND > 64.30) %>%
+  count(SEASON)
+```
+
+Let's display the first **5** rows of `named_hurricanes`
+
+```{r}
+head(named_hurricanes)
+```
+
+Now using `named_hurricanes` we can create a new data frame `num_named_hurricanes` which contains all of the named hurricanes that happened per year
+
+```{r}
+num_named_hurricanes = named_hurricanes %>%
+  group_by(SEASON) %>%
+  count(SEASON)
+```
+
+Let's display the first **5** rows of `num_named_hurricanes`
+
+```{r}
+head(num_named_hurricanes)
+```
+
+Now we can compute the average number of named hurricanes
+
+```{r}
+mean(num_named_hurricanes$n)
+```
+
+We can extract the total number of named hurricanes in **2012** with the following code
+
+```{r}
+filter(num_named_hurricanes, SEASON == 2012)
+```
+
+Therefore the average number of named hurricanes between **1970** and **2021** was about **6** per year. In **2012** there was **10** named hurricanes. Therefore **2012** was an ***above-average year***.
+
+We can see this in the following graph
+
+```{r}
+ggplot(data = num_named_hurricanes, aes(x = SEASON, y = n)) +
+  geom_col(width = .8,
+           fill = my_grey1) + 
+  labs(title = "Total Number of Named Hurricanes",
+       subtitle = "Comparing the historical average number of named hurricanes to the 2012 season",
+       x = "Year",
+       y = "Total") + 
+  geom_col(data = filter(num_named_hurricanes, SEASON == 2012),
+           color = my_red,
+           fill = my_red,
+           width = .8) + 
+  geom_text(x = 2013.5,
+            y = 10.8, 
+            label = "2012",
+            color = my_red,
+            size = 6.8) + 
+  geom_hline(yintercept = mean(num_named_hurricanes$n),
+             col = my_blue,
+             size = 1) + 
+  geom_text(x = 1974,
+            y = 10.3,
+            size = 6,
+            col = my_blue,
+            show.legend = TRUE,
+            aes(label = "Average")) +
+  geom_segment(x = 1974, y = 9.5,
+               xend = 1974, yend = 6.8,
+               lineend = "round",
+               linejoin = "round",
+               size = .7,
+               color = my_blue,
+               arrow = arrow(length = unit(0.3, "cm"),
+                             type = "closed"),
+               )
+
+```
+
+### 3.3.c.) Compared to the "historical" average of maximum winds, was the 2012 season an above-average, a below-average, or an average season?
+
+First, let's create a data frame `max_winds` which contains the maximum winds per year. Therefore we have
+
+```{r}
+# For the 2021 season the wind speeds are not available
+
+max_winds = DF %>%
+  filter(SEASON != 2022) %>% 
+  select(SEASON, WMO_WIND) %>%
+  group_by(SEASON) %>%
+  summarise(max_wmo_wind = max(WMO_WIND, na.rm = TRUE))
+```
+
+Let's display the first **5** rows of `max_winds`
+
+```{r}
+head(max_winds)
+```
+
+Now we can compute the average of max winds between **1970** and **2020**
+
+```{r}
+mean(max_winds$max_wmo_wind)
+```
+
+We can extract the maximum wind speeds in **2012** with the following code
+
+```{r}
+filter(max_winds, SEASON == 2012)
+```
+
+Therefore the average of maximum winds between **1970** and **2020** was about **126 knots** or about **145 mph**. The maximum wind speed in **2012** was about **100 knots** or about **115 mph**. Therefore **2012** was a ***below-average season*** with respect to maximum wind speeds.
+
+We can show this with the following graph
+
+```{r}
+ggplot(data = max_winds, aes(x = SEASON, y = max_wmo_wind)) + 
+  labs(title = "Maximum Wind Speeds",
+       subtitle = "Comparing the historical average of maximum wind speeds to the 2012 season",
+       x = "Year",
+       y = "Maximum Wind in Knots") +
+  geom_line(linetype = "dashed",
+            color = my_grey1) +
+  geom_point(size = 1.8,
+             color = my_grey2) + 
+  geom_point(x = 2012,
+             y = 100,
+             size = 3,
+             color = my_red) + 
+  geom_text(x = 2008.5,
+            y = 96,
+            color = my_red,
+            size = 6.8,
+            label = "2012") + 
+  geom_hline(yintercept = mean(max_winds$max_wmo_wind),
+             size = 1,
+             color = my_blue
+             ) + 
+  geom_text(x = 1979,
+            y = 95,
+            size = 6,
+            color = my_blue,
+            label = "Average") + 
+  geom_segment(x = 1979.8, y = 100,
+               xend = 1979.8, yend = 123,
+               lineend = "round",
+               linejoin = "round",
+               size = .7,
+               color = my_blue,
+               arrow = arrow(length = unit(.3, "cm"),
+                             type = "closed"))
+```
+
+## 3.4. Season Summary Map
+
+Let's now graph map of the storm paths for 2012. First, we'll need the following `world` dataset.
+
+```{r}
+world_df = map_data("world")
+```
+
+### 3.4.a.) Let's now get a graph to the map of the storms
+
+Let's now create an additional data frame `named_depressions_2012` which contains all of the individual storms and their respective time of dissipation, latitude, and longitude columns.
+
+```{r}
+named_depressions_2012 = depressions_2012 %>%
+  select(NAME, ISO_TIME, LAT, LON) %>%
+  group_by(NAME) %>%
+  summarise(date = last(ISO_TIME),
+            lat = last(LAT),
+            lon = last(LON))
+```
+
+Now we can get a graph of our map
+
+```{r}
+#| warning: FALSE
+ggplot(data = world_df) + 
+  labs(title = "Storm Paths in 2012",
+       subtitle = "The location of the names is where the storm dissipated",
+       x = "Longitude",
+       y = "Latitude") + 
+  geom_map(aes(x = long, y = lat, map_id = region),
+           map = world_df, 
+           size = 1,
+           fill = my_grey2) +
+  xlim(-105,-1) + ylim(12,58) +
+  geom_point(data = depressions_2012,
+             aes(x = LON, y = LAT, color = NAME),
+             size = .7,
+             show.legend = FALSE) + 
+  geom_label(data = named_depressions_2012,
+            aes(x = lon,
+                y = lat,
+                label = NAME,
+                color = NAME),
+            show.legend = FALSE,
+            size = 1.8,
+            label.size = .7)
+```
+
+### 3.4.b.) Did any hurricanes hit the United States? If yes, how many, and which ones?
+
+Similarly, let's now create an additional data frame `named_hurricanes_2012` which contains all of the individual hurricanes and their respective time of dissipation, latitude, and longitude columns. Therefore
+
+```{r}
+# 74 mph = 64.30 knots 
+
+named_hurricanes_2012 = filter(depressions_2012, WMO_WIND >= 64.30) %>%
+  select(NAME, ISO_TIME, LAT, LON) %>%
+  group_by(NAME) %>%
+  summarise(date = last(ISO_TIME),
+            lat = last(LAT),
+            lon = last(LON))
+```
+
+```{r}
+#| warning: FALSE
+ggplot(data = world_df) + 
+  labs(title = "Storm Paths in 2012",
+       subtitle = "The labeled storms are hurricanes",
+       x = "Longitude",
+       y = "Latitude") + 
+  geom_map(aes(x = long, y = lat, map_id = region),
+           map = world_df, 
+           size = 1,
+           fill = my_grey2) +
+  xlim(-105,-1) + ylim(12,58) +
+  geom_point(data = depressions_2012,
+             aes(x = LON, y = LAT, color = NAME),
+             size = .7,
+             show.legend = FALSE) + 
+  geom_label(data = named_hurricanes_2012,
+            aes(x = lon,
+                y = lat,
+                label = NAME,
+                color = NAME),
+            show.legend = FALSE,
+            size = 1.8,
+            label.size = .7)
+```
+
+From our map we can see that **2** hurricanes hit the United States and they were **Isaac** and **Sandy**.
+
