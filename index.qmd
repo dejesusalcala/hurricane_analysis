@@ -4,7 +4,7 @@ author: "Angel Alcala Ruiz"
 date: "2023-04-29"
 format:
   html:
-    code-fold: true
+    code-fold: show
     code-tools: true
     toc: true
     toc-location: left
